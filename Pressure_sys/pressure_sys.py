@@ -85,7 +85,8 @@ listVTK = sorted(listVTK)
 #Create a list of time_steps
 time_list = {i.replace('.vtk', '').replace('CFD_', '') for i in listVTK}
 time_list = {float(i) for i in time_list}
-time_list = sorted({5*i*10e-4 for i in time_list})
+time_list = sorted({round(5*i*10e-6, 2) for i in time_list})
+print(time_list)
 
 #Reading VTK data
 for i in range(0, len(listVTK)):
@@ -119,55 +120,63 @@ print('Pressure differences:')
 print(f'Simulation = {delta_p_simulated} | Analytical = {delta_p_Analytical} | Ergun = {delta_p_Ergun}')
 
 if plot_P_t:
+    
+    #Create figure for deltaP vs t
+    fig0 = plt.figure()
+    ax0 = fig0.add_subplot(111)
+
+    #Create figure to P at 40cm vs t
+    fig1 = plt.figure()
+    ax1 = fig1.add_subplot(111)
+
+    #creating lists to fill with pressure values
+    delta_p_simulated_list = []
+    P_40cm = []
+
     for i in range(0, len(listVTK)):
-        #Define "df_last" as last time step df
-        exec(f'df_last = df_{i}') 
+        #Define df_i as current time step df
+        exec(f'df_i = df_{i}') 
 
         #Convert cell data to point data
-        df_last = df_last.cell_centers()
+        df_i = df_i.cell_centers()
 
         #Convert cell positions and pressure values to pandas
-        df_last_cells = pd.DataFrame(df_last.points)
-        df_last_p     = pd.DataFrame(df_last['p'])
+        df_i_cells_position = pd.DataFrame(df_i.points)
+        df_i_p     = pd.DataFrame(df_i['p'])
 
         #Calculate the avarage pressure at the first layer of cells
-        p0 = df_last_p[df_last_cells[2] == df_last_cells.iloc[0, 2]].mean()[0]
+        p0 = df_i_p[df_i_cells_position[2] == df_i_cells_position.iloc[0, 2]].mean()[0]
 
         #The same to the last layer
-        pf = df_last_p[df_last_cells[2] == df_last_cells.iloc[-1, 2]].mean()[0]
+        pf = df_i_p[df_i_cells_position[2] == df_i_cells_position.iloc[-1, 2]].mean()[0]
 
         #Find the bed total pressure drop:
         delta_p_simulated = (p0-pf)*rhol
+        delta_p_simulated_list.append(delta_p_simulated)
 
-        #Plot results against estimations
-        plt.scatter(time_list[i]/100, delta_p_Ergun, c = 'b')
-        plt.scatter(time_list[i]/100, delta_p_Analytical, c = 'r')
-        plt.scatter(time_list[i]/100, delta_p_simulated, c='k')
-        
-    plt.legend(['Ergun', 'Analytical', 'Simulated'])
+        #Selecting data by its position
+        position_data = 40 #cm
+        df_i_40cm = df_i_p[df_i_cells_position[2] == position_data] #Z position around positionData
+        df_i_40cm = df_i_p[df_i_cells_position[2] < position_data] #first layer below the position
+        P_40cm.append(df_i_40cm.mean()[0]*rhol)
+
+    #Plot deltaP vs t
+    ax0.plot(time_list, np.repeat(delta_p_Ergun, len(time_list)))
+    ax0.plot(time_list, np.repeat(delta_p_Analytical, len(time_list)))
+    ax0.plot(time_list, delta_p_simulated_list,'ok')
+    ax0.legend(['Ergun', 'Analytical', 'Simulated'])
+    ax0.set_ylabel(r'$\Delta P \/\ [Pa]$')
+    ax0.set_xlabel(r'$time \/\ [sec]$')
+
+    #plot P at 40 cm as a function of time
+    ax1.plot(time_list, P_40cm, '-ok')
+    ax1.legend(['Pressure at 40 cm'])
+    ax1.set_ylabel(r'$Pressure \/\ at \/\ 40 \/\ cm \/\ [Pa]$')
+    ax1.set_xlabel(r'$time \/\ [sec]$')
+
+
     saveFigDir = currentPath.replace('/VTK', '')
-    plt.savefig(f'{saveFigDir}/deltaP_t.png')
-    print(f'Pressure as func of time plot was saved to {currentPath}')
-exit()
+    fig0.savefig(f'{saveFigDir}/deltaP_t.png')
+    fig1.savefig(f'{saveFigDir}/P40_t.png')
+    print(f'Pressure as func of time plot was saved to {saveFigDir}')
 
-"""
-    #Selecting data by its position
-    positionData = 40#cm
-    exec(f'df_{i}_40cm = df_{i}[round(100*df_{i}[2]) == positionData]') #Z position around positionData
-    exec(f'df_{i}_40cm = df_{i}[100*df_{i}[2] < positionData]') #first layer below the position
-
-    plt.scatter(time_list[i]/100, delta_p_simulated, c='k')
-    plt.savefig(f'{saveFigDir}/deltaP_t.png')
-
-
-
-if figure:
-    fig = plt.figure()
-    ax = Axes3D(fig)
-
-    #ax.scatter(pd.DataFrame(mesh.points).iloc[:][0], pd.DataFrame(mesh.points).iloc[:][1], pd.DataFrame(mesh.points).iloc[:][2], c = np.array(mesh.point_data['voidfraction']))
-    plt.show()
-
-    # Now plot the grid
-    #df_last.cell_data["values"] = df_last.cell_data['voidfraction'] 
-    #df_last.plot(show_edges=True)"""
