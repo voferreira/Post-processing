@@ -77,7 +77,7 @@ for i in range(0, len(listVTU)):
     p0 = np.mean(slice0['pressure'])
 
     #Take the first slice of the domain at posf
-    posf = [H/2, 0, 0]
+    posf = [Hb/2, 0, 0]
     slicef = df.slice(normal=[1, 0, 0], origin = posf)
     pf = np.mean(slicef['pressure'])
 
