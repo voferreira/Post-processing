@@ -33,11 +33,11 @@ import sys
 '''Simulation properties'''
 
 g = 9.81        #m/s^2
-rp = 0.001332   #m
+rp = 0.00154362 #            Alumina: 0.00154362 Alginate: 0.001332  #m
 dp = 2*rp       #m
-rhop = 1028.805 #kg/m^3
-Np = 107960     #[-]
-
+rhop = 3585.892  #         Alumina: 3585.892   Alginate: 1028.805 #kg/m^3
+Np = 72401 #               Alumina: 72401      Alginate: 107960    #[-]
+Vnp = Np * 4/3 * pi * rp**3
 
 rhol = 996.778  #kg/m^3
 nu = 0.00000084061 #m^2/s
@@ -46,7 +46,7 @@ Db = 0.1        #m
 Rb = Db/2       #m
 Area = pi*Rb**2 #m^2
 
-inlet_velocity = 0.01 #m/s
+inlet_velocity = 0.0951 #m/s
 
 #############################################################################
 
@@ -71,22 +71,22 @@ currentPath = sys.argv[1]
 
 #Define list of VTK files and time list:
 listVTK = os.listdir(currentPath)
-listVTK.remove('walls')
-listVTK.remove('inlet')
-listVTK.remove('outlet')
+
 try:
+    listVTK.remove('walls')
+    listVTK.remove('inlet')
+    listVTK.remove('outlet')
     listVTK.remove('VTK')
 except:
     print('')
 
-#Reorder listVTK
-listVTK = sorted(listVTK)
-
 #Create a list of time_steps
-time_list = {i.replace('.vtk', '').replace('CFD_', '') for i in listVTK}
-time_list = {float(i) for i in time_list}
-time_list = sorted({round(5*i*10e-6, 2) for i in time_list})
-print(time_list)
+time_list = [i.replace('.vtk', '').replace('CFD_', '') for i in listVTK]
+time_list = [float(i) for i in time_list]
+time_list = [round(2.5*i*10e-5, 2) for i in time_list]
+
+#Sort list
+time_list, listVTK = (list(t) for t in zip(*sorted(zip(time_list, listVTK))))
 
 #Reading VTK data
 for i in range(0, len(listVTK)):
@@ -161,16 +161,19 @@ if plot_P_t:
         P_40cm.append(df_i_40cm.mean()[0]*rhol)
 
     #Plot deltaP vs t
-    ax0.plot(time_list, np.repeat(delta_p_Ergun, len(time_list)))
+    #ax0.plot(time_list, np.repeat(delta_p_Ergun, len(time_list)))
+    fig0.suptitle('Explicit')
     ax0.plot(time_list, np.repeat(delta_p_Analytical, len(time_list)))
     ax0.plot(time_list, delta_p_simulated_list,'ok')
-    ax0.legend(['Ergun', 'Analytical', 'Simulated'])
+    ax0.grid()
+    ax0.legend(['Analytical', 'Simulated'])
     ax0.set_ylabel(r'$\Delta P \/\ [Pa]$')
     ax0.set_xlabel(r'$time \/\ [sec]$')
 
     #plot P at 40 cm as a function of time
     ax1.plot(time_list, P_40cm, '-ok')
     ax1.legend(['Pressure at 40 cm'])
+    ax1.grid()
     ax1.set_ylabel(r'$Pressure \/\ at \/\ 40 \/\ cm \/\ [Pa]$')
     ax1.set_xlabel(r'$time \/\ [sec]$')
 

@@ -3,17 +3,29 @@
 Postprocessing automation tool.
 
 By: Victor Oliveira Ferreira
-Date: Nov. 25, 2021
+Date: Sep. 10, 2021
 """
 #############################################################################
 
 #############################################################################
+'''Parameters'''
+
+figure = False #True if plot
+plot_P_t = False
+#############################################################################
+
+#############################################################################
 '''Importing Libraries'''
-from math import pi
+from math import e, pi
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import pyvista as pv
+from sklearn import linear_model
+from scipy.interpolate import make_interp_spline
+
+import glob
 
 import os
 import sys
@@ -23,7 +35,7 @@ import sys
 '''Simulation properties'''
 
 particle = 'Alginate'
-scheme = 'Q1-Q1'
+scheme = 'Q2-Q1'
 
 if particle == 'Alginate':
     rp = 0.001332 #            Alumina: 0.00154362 Alginate: 0.001332  #m
@@ -62,17 +74,9 @@ Hb = 1.1
 
 #############################################################################
 '''Functions'''
-
-# Analytical solution to pressure drop in fluidized bed
 def Analytical(Np, rp, rhol, rhop, g, Area):
     Mp = Np*4/3*pi*rp**3*rhop
     delta_p = Mp*(rhop - rhol)*g/(rhop * Area)
-    return delta_p
-
-#Ergun equation to predict pressure drop at fixed beds
-def Ergun(inlet_velocity, mu, rhol, dp):
-    eps_mf = 0.415
-    delta_p = 0.23875*(150*inlet_velocity*mu*(1 - eps_mf)**2/(dp**2*eps_mf**3) + 1.75*inlet_velocity**2*rhol*(1 - eps_mf)/(dp*eps_mf**3))
     return delta_p
 #############################################################################
 
@@ -81,66 +85,35 @@ currentPath = sys.argv[1]
 saveFigDir = currentPath.replace('/output', '')
 
 #Read name of files in .pvd file
-files = pd.read_csv(f'{currentPath}/result_.pvd',sep='"',skiprows=6, usecols=[1, 5], names = ['time', 'vtu'])
+files = pd.read_csv(f'{currentPath}/result_particles.pvd',sep='"',skiprows=6, usecols=[1, 5], names = ['time', 'vtu'])
 files = files.dropna()
 time_list = files['time'].tolist()
 list_vtu = files['vtu'].tolist()
 list_vtu = [i.replace('.pvtu', '.0000.vtu') for i in list_vtu]
 
-#Estimating analytical and Ergun equation pressure drop
-delta_p_Analytical = Analytical(Np, rp, rhol, rhop, g, Area)
-delta_p_Ergun  = Ergun(inlet_velocity, mu, rhol, dp)
-
-#Define eps_list and voidfraction_list to append value for each time-step
-delta_p_simulated_list = []
-
 #Read VTU data
 for i in range(0, len(list_vtu)):
-
     #Read DF from VTU files
-    df = pv.read(f'{currentPath}/{list_vtu[i]}')
-    
-    #Adjust data format
-    df = df.point_data_to_cell_data()
-
-    #Take the first slice of the domain at pos0
-    pos0 = [-0.45, 0, 0]
-    slice0 = df.slice(normal=[1, 0, 0], origin = pos0)
-    p0 = np.mean(slice0['pressure'])
-
-    #Take the first slice of the domain at posf
-    posf = [Hb/2-0.02, 0, 0]
-    slicef = df.slice(normal=[1, 0, 0], origin = posf)
-    pf = np.mean(slicef['pressure'])
-
-    #Store the total pressure drop
-    delta_p_simulated_list.append((p0 - pf)*rhol)
-
-#Export the total pressure results as a function of time
-csv = pd.DataFrame([time_list, delta_p_simulated_list], index=['time', 'deltaP']).transpose()
-csv.to_csv(f'{saveFigDir}/deltaP_t.csv')
+    exec(f'df_{i} = pv.read(f\'{currentPath}/{list_vtu[i]}\')')
 
 
-#Plot pressure vs time
-fig0 = plt.figure()
-ax0 = fig0.add_subplot(111)
-fig0.suptitle(f'{particle}: {scheme}')
-ax0.plot(time_list, np.repeat(delta_p_Analytical, len(time_list)))
-ax0.plot(time_list, delta_p_simulated_list,'ok')
-ax0.grid()
-ax0.legend(['Analytical', 'Simulated'])
-ax0.set_ylabel(r'$\Delta P \/\ [Pa]$')
-ax0.set_xlabel(r'$time \/\ [sec]$')
-fig0.savefig(f'{saveFigDir}/deltaP_t.png')
+#Select a data to apply the slice   
+exec(f'df = df_{len(list_vtu)-1}')
+df = df
+print(df.points[0])
+#Choose the white background for the figure
+pv.set_plot_theme("document")
 
-fig1 = plt.figure()
-ax1 = fig1.add_subplot(111)
-fig1.suptitle(f'{particle}: {scheme}')
-ax1.plot(time_list[1:], np.repeat(delta_p_Analytical, len(time_list)-1))
-ax1.plot(time_list[1:], delta_p_simulated_list[1:],'ok')
-ax1.grid()
-ax1.legend(['Analytical', 'Simulated'])
-ax1.set_ylabel(r'$\Delta P \/\ [Pa]$')
-ax1.set_xlabel(r'$time \/\ [sec]$')
-fig1.savefig(f'{saveFigDir}/deltaP_t-Zoom.png')
+#Create a plotter
+plotter = pv.Plotter(off_screen=None)
 
+#Apply spherical glyph to the particles:
+spheres = pv.Sphere(radius = rp, center = df.points.tolist(), theta_resolution=30, phi_resolution=30)#df.glyph(scale = 'Velocity', factor = 1, progress_bar = True)
+
+#Add data to the plotter
+plotter.add_mesh(spheres, cmap = 'turbo')#, scalars = df['Velocity'], cmap = 'turbo', render_points_as_spheres = True, point_size = 5)#df['Diameter'][0])
+
+plotter.camera_position = 'xy'
+plotter.camera.roll += 90
+
+plotter.show(screenshot=f'{saveFigDir}/particles.png')
