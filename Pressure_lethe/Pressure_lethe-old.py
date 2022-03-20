@@ -15,7 +15,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pyvista as pv
 
-from .Classes.
+import os
 import sys
 #############################################################################
 
@@ -140,9 +140,9 @@ fig0.savefig(f'{saveFigDir}/deltaP_t.png')
 fig1 = plt.figure()
 ax1 = fig1.add_subplot(111)
 fig1.suptitle(f'{particle}: {scheme}')
-#ax1.plot(time_list[1:], np.repeat(delta_p_Analytical, len(time_list)-1), label = 'Analytical')
-ax1.plot(time_list[1:], np.repeat(delta_p_Ergun, len(time_list)-1), label = 'Ergun')
-ax1.plot(time_list[1:], delta_p_simulated_list[1:],'ok')
+ax1.plot(time_list[1:], np.repeat(delta_p_Analytical, len(time_list)-1), '--r',label = 'Analytical')
+#ax1.plot(time_list[1:], np.repeat(delta_p_Ergun, len(time_list)-1), label = 'Ergun')
+ax1.plot(time_list[1:], delta_p_simulated_list[1:],'ok', label = 'Simulation')
 ax1.grid()
 ax1.legend()
 ax1.set_ylabel(r'$\Delta P \/\ [Pa]$')

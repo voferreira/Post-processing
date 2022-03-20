@@ -34,11 +34,32 @@ import sys
 #############################################################################
 '''Simulation properties'''
 
+particle = 'Alumina'
+scheme = 'CFDEM-Explicit'
+
+if particle == 'Alginate':
+    rp = 0.001332 #            Alumina: 0.00154362 Alginate: 0.001332  #m
+    rhop = 1028.805  #         Alumina: 3585.892   Alginate: 1028.805 #kg/m^3
+    Np = 107960 #               Alumina: 72401      Alginate: 107960    #[-]
+    inlet_velocity = 0.0095   #0.0095 #m/s
+    eps_RZ = 0.68 #0.68 #0.55
+    eps_exp = 0.646 #0.646 #0.55
+
+elif particle == 'Alumina':
+    rp = 0.00154362 #            Alumina: 0.00154362 Alginate: 0.001332  #m
+    rhop = 3585.892  #         Alumina: 3585.892   Alginate: 1028.805 #kg/m^3
+    Np = 72401 #               Alumina: 72401      Alginate: 107960    #[-]
+    inlet_velocity = 0.095   #0.0095 #m/s
+    eps_RZ = 0.55
+    eps_exp = 0.55
+
+else:
+    print(f'Particle not identified: {particle}')
+    print('Aborting')
+    exit()
+
 g = 9.81        #m/s^2
-rp = 0.00154362 #            Alumina: 0.00154362 Alginate: 0.001332  #m
 dp = 2*rp       #m
-rhop = 3585.892  #         Alumina: 3585.892   Alginate: 1028.805 #kg/m^3
-Np = 72401 #               Alumina: 72401      Alginate: 107960    #[-]
 Vnp = Np * 4/3 * pi * rp**3
 
 rhol = 996.778  #kg/m^3
@@ -47,11 +68,7 @@ mu = rhol*nu    #Pa
 Db = 0.1        #m
 Rb = Db/2       #m
 Area = pi*Rb**2 #m^2
-
-inlet_velocity = 0.0951 #m/s
-
-eps_RZ = 0.550
-eps_exp = 0.550
+Hb = 1.1
 
 #############################################################################
 
@@ -151,6 +168,22 @@ for i in range(len(listVTK)):
     eps = 1-(model.coef_[0][0]/((rhop-rhol)*g))
     eps_list.append(eps)
 
+    fig1 = plt.figure()
+    ax1 = fig1.add_subplot(111)
+    fig1.suptitle(f'{particle}: {scheme}, time = {time_list[i]}')
+    ax1.plot(z_list, p_z, 'ok', ms = 5)
+    ax1.plot(x, y, '.g')
+    ax1.plot(x, model.predict(x), '-b')
+    #plt.text(17.5, 0, r'$\varepsilon =  (-dp/dz)$')
+    ax1.grid()
+    ax1.set_ylabel(r'$\Delta P \/\ [Pa]$')
+    ax1.set_xlabel(r'$Height \/\ [m]$')
+    ax1.set_xlim(0, 1.02)
+    ax1.set_ylim(0, deltaP_analytical*1.30)
+    ax1.annotate(r'$\varepsilon (-dp/dz) = {:1.2}$'.format(eps), (x[round(len(x)/2)], y[round(len(y)/2)]), xytext=(0.65, 0.4), textcoords='axes fraction', arrowprops=dict(facecolor='black', shrink=0.04), fontsize=14, horizontalalignment='right', verticalalignment='top')
+    fig1.savefig(f'{saveFigDir}/P_z/P_z-{i}.png')
+    plt.close(fig1)
+
 #Determine a moving average of the eps values
 """eps_ave = np.mean(eps_list[-22:])
 eps_moving_ave = []
@@ -186,7 +219,7 @@ ax0.set_xlabel(r'$Time \/\ [s]$')
 fig0.savefig(f'{saveFigDir}/eps_t.png')
 
 #plot p as a function o z
-fig1 = plt.figure()
+"""fig1 = plt.figure()
 ax1 = fig1.add_subplot(111)
 fig1.suptitle('Explicit scheme')
 ax1.plot(z_list, p_z, 'ok', ms = 5)
@@ -196,7 +229,7 @@ ax1.plot(x, model.predict(x), '-b')
 ax1.grid()
 ax1.set_ylabel(r'$\Delta P \/\ [Pa]$')
 ax1.set_xlabel(r'$Height \/\ [m]$')
-fig1.savefig(f'{saveFigDir}/P_z.png')
+fig1.savefig(f'{saveFigDir}/P_z.png')"""
 
 
 height = Vnp/(Area*(1-eps_ave))

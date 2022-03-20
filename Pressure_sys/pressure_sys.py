@@ -32,11 +32,32 @@ import sys
 #############################################################################
 '''Simulation properties'''
 
+particle = 'Alumina'
+scheme = 'CFDEM-Explicit'
+
+if particle == 'Alginate':
+    rp = 0.001332 #            Alumina: 0.00154362 Alginate: 0.001332  #m
+    rhop = 1028.805  #         Alumina: 3585.892   Alginate: 1028.805 #kg/m^3
+    Np = 107960 #               Alumina: 72401      Alginate: 107960    #[-]
+    inlet_velocity = 0.0095   #0.0095 #m/s
+    eps_RZ = 0.68 #0.68 #0.55
+    eps_exp = 0.646 #0.646 #0.55
+
+elif particle == 'Alumina':
+    rp = 0.00154362 #            Alumina: 0.00154362 Alginate: 0.001332  #m
+    rhop = 3585.892  #         Alumina: 3585.892   Alginate: 1028.805 #kg/m^3
+    Np = 72401 #               Alumina: 72401      Alginate: 107960    #[-]
+    inlet_velocity = 0.095   #0.0095 #m/s
+    eps_RZ = 0.55
+    eps_exp = 0.55
+
+else:
+    print(f'Particle not identified: {particle}')
+    print('Aborting')
+    exit()
+
 g = 9.81        #m/s^2
-rp = 0.00154362 #            Alumina: 0.00154362 Alginate: 0.001332  #m
 dp = 2*rp       #m
-rhop = 3585.892  #         Alumina: 3585.892   Alginate: 1028.805 #kg/m^3
-Np = 72401 #               Alumina: 72401      Alginate: 107960    #[-]
 Vnp = Np * 4/3 * pi * rp**3
 
 rhol = 996.778  #kg/m^3
@@ -45,8 +66,7 @@ mu = rhol*nu    #Pa
 Db = 0.1        #m
 Rb = Db/2       #m
 Area = pi*Rb**2 #m^2
-
-inlet_velocity = 0.0951 #m/s
+Hb = 1.1
 
 #############################################################################
 
@@ -71,6 +91,7 @@ currentPath = sys.argv[1]
 
 #Define list of VTK files and time list:
 listVTK = os.listdir(currentPath)
+saveFigDir = currentPath.replace('/VTK', '')
 
 try:
     listVTK.remove('walls')
@@ -83,7 +104,7 @@ except:
 #Create a list of time_steps
 time_list = [i.replace('.vtk', '').replace('CFD_', '') for i in listVTK]
 time_list = [float(i) for i in time_list]
-time_list = [round(2.5*i*10e-5, 2) for i in time_list]
+time_list = [round(2*2.5*i*10e-5, 2) for i in time_list]
 
 #Sort list
 time_list, listVTK = (list(t) for t in zip(*sorted(zip(time_list, listVTK))))
@@ -125,9 +146,13 @@ if plot_P_t:
     fig0 = plt.figure()
     ax0 = fig0.add_subplot(111)
 
-    #Create figure to P at 40cm vs t
+    #Create figure for deltaP vs t
     fig1 = plt.figure()
     ax1 = fig1.add_subplot(111)
+
+    #Create figure to P at 40cm vs t
+    fig2 = plt.figure()
+    ax2 = fig2.add_subplot(111)
 
     #creating lists to fill with pressure values
     delta_p_simulated_list = []
@@ -162,7 +187,7 @@ if plot_P_t:
 
     #Plot deltaP vs t
     #ax0.plot(time_list, np.repeat(delta_p_Ergun, len(time_list)))
-    fig0.suptitle('Explicit')
+    fig0.suptitle('Alginate: CFDEM-Explicit')
     ax0.plot(time_list, np.repeat(delta_p_Analytical, len(time_list)))
     ax0.plot(time_list, delta_p_simulated_list,'ok')
     ax0.grid()
@@ -170,16 +195,26 @@ if plot_P_t:
     ax0.set_ylabel(r'$\Delta P \/\ [Pa]$')
     ax0.set_xlabel(r'$time \/\ [sec]$')
 
-    #plot P at 40 cm as a function of time
-    ax1.plot(time_list, P_40cm, '-ok')
-    ax1.legend(['Pressure at 40 cm'])
+    fig1.suptitle('Alginate: CFDEM-Explicit')
+    ax1.plot(time_list[2:], np.repeat(delta_p_Analytical, len(time_list[2:])))
+    ax1.plot(time_list[2:], delta_p_simulated_list[2:],'ok')
     ax1.grid()
-    ax1.set_ylabel(r'$Pressure \/\ at \/\ 40 \/\ cm \/\ [Pa]$')
+    ax1.legend(['Analytical', 'Simulated'])
+    ax1.set_ylabel(r'$\Delta P \/\ [Pa]$')
     ax1.set_xlabel(r'$time \/\ [sec]$')
 
+    #plot P at 40 cm as a function of time
 
-    saveFigDir = currentPath.replace('/VTK', '')
+    ax2.plot(time_list, P_40cm, '-ok')
+    ax2.legend(['Pressure at 40 cm'])
+    ax2.grid()
+    ax2.set_ylabel(r'$Pressure \/\ at \/\ 40 \/\ cm \/\ [Pa]$')
+    ax2.set_xlabel(r'$time \/\ [sec]$')
+
+
+
     fig0.savefig(f'{saveFigDir}/deltaP_t.png')
-    fig1.savefig(f'{saveFigDir}/P40_t.png')
+    fig1.savefig(f'{saveFigDir}/deltaP_t-Zoom.png')
+    fig2.savefig(f'{saveFigDir}/P40_t.png')
     print(f'Pressure as func of time plot was saved to {saveFigDir}')
 

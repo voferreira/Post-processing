@@ -12,11 +12,19 @@ Date: Sep. 10, 2021
 
 figure = False #True if plot
 plot_P_t = False
+
+clip_results = False
+smooth = True
+
+if smooth:
+    print('Smoothing, so not clipping')
+    clip_results = False
 #############################################################################
 
 #############################################################################
 '''Importing Libraries'''
 from math import e, pi
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -34,8 +42,8 @@ import sys
 #############################################################################
 '''Simulation properties'''
 
-particle = 'Alginate'
-scheme = 'Q2-Q1'
+particle = 'Alumina'
+scheme = 'Q1-Q1'
 
 if particle == 'Alginate':
     rp = 0.001332 #            Alumina: 0.00154362 Alginate: 0.001332  #m
@@ -81,24 +89,21 @@ def basic_interpolation(now, nxt, frac):
     nxt_id = np.argsort(nxt['ID'])
     interp = now.copy()
 
-    vel = now['Velocity_Norm'][now_id]*(1 - frac) + nxt['Velocity_Norm'][nxt_id]*frac
+    vel = now['Velocity_Z'][now_id]*(1 - frac) + nxt['Velocity_Z'][nxt_id]*frac
     # breakpoint()
     interp.points = now.points[now_id]*(1 - frac) + nxt.points[nxt_id]*frac
-    interp['Velocity_Norm'] = vel
+    interp['Velocity_Z'] = vel
 
     # finally, generate particles
     ds_glyph_interp = interp.glyph(scale='Diameter', geom=sphere)
-    ds_glyph_interp.active_scalars_name = 'Velocity_Norm'
+    ds_glyph_interp.active_scalars_name = 'Velocity_Z'
     return ds_glyph_interp
 
 def create_particles(df_name):
-    df = df_name
-
-    #create a sphere with diameter 1
-    sphere = pv.Sphere(theta_resolution=10, phi_resolution=10)
+    df_ = df_name
 
     # create spheres scaled to the diameter of the array "Diameter"
-    df_glyph = df.glyph(scale='Diameter', geom=sphere)
+    df_glyph = df_.glyph(scale='Diameter', geom=sphere)
 
     # compute normalized velocity
     #df_glyph['Velocity_Norm'] = np.linalg.norm(df_glyph['Velocity'], axis=1)
@@ -117,16 +122,22 @@ list_vtu = files['vtu'].tolist()
 list_vtu = [i.replace('.pvtu', '.0000.vtu') for i in list_vtu]
 
 #Read VTU data
-
-bounds = pv.Cube(center = [0, 0, -0.025], x_length = 1.1, y_length = 0.1, z_length = 0.05)
-for i in range(0, 1):#, len(list_vtu)):
+bounds = pv.Cube(center = [0, -0.025, 0], x_length = 1.1, y_length = 0.05, z_length = 0.1)
+pbar = tqdm(total=len(list_vtu), desc="Reading VTU")
+for i in range(0, len(list_vtu)):
     #Read DF from VTU files
     exec(f'df_{i} = pv.read(f\'{currentPath}/{list_vtu[i]}\')')
-    exec(f'df_{i} = df_{i}.clip_box(bounds, invert=False)')
+    exec(f'df_{i}[\'Velocity_Z\'] = df_{i}[\'Velocity\'][:, 0]')
+    if clip_results:
+        exec(f'df_{i} = df_{i}.clip_box(bounds, invert=False)')
+    pbar.update()
 
 
 #Select a data to apply the slice   
-exec(f'df = df_{0}')
+exec(f'df = df_{len(list_vtu)-2}')
+
+#create a sphere with diameter 1
+sphere = pv.Sphere(theta_resolution=10, phi_resolution=10)
 
 #Choose the white background for the figure
 pv.set_plot_theme("document")
@@ -134,14 +145,44 @@ pv.set_plot_theme("document")
 #Create a plotter
 plotter = pv.Plotter(off_screen=None)
 
-# create spheres scaled to the diameter of the array "Diameter"
+plotter.camera.position = (0, 1.2, 0)
+plotter.camera.focal_point = (-0.15, 0, 0)
+plotter.camera.roll -= 90
+
+#plotter.camera_position = 'xy'
+#plotter.camera.roll += 90
+
 df_glyph = create_particles(df)
 
 #Add data to the plotter
-plotter.add_mesh(df_glyph, cmap = 'turbo', scalars = 'Velocity', smooth_shading=True, scalar_bar_args={'color': 'k', 'vertical': True})
+plotter.add_mesh(df_glyph, cmap = 'turbo', scalars = 'Velocity_Z', smooth_shading=True, scalar_bar_args={'color': 'k', 'vertical': True, 'position_x' : 0.60, 'position_y' :0.05})
 
-plotter.camera_position = 'xy'
-plotter.camera.roll += 90
+plotter.open_movie(f"{saveFigDir}/particles_interpolate.mp4", framerate=40, quality=8) #20
 
-plotter.show(screenshot=f'{saveFigDir}/particles.png', return_cpos=True)
-#plotter.show(return_cpos=True)
+n_substeps = 10
+n_total = (len(time_list) - 1)*n_substeps
+pbar = tqdm(total=n_total, desc="Writing Frames")
+for i in range(1, len(list_vtu)-1):
+    
+    if smooth:
+        df_prev = df
+        exec(f'df = df_{i}')
+        for j in range(n_substeps):
+            interp = basic_interpolation(df_prev, df, j/n_substeps)
+            plotter.mesh.overwrite(interp)
+            plotter.add_text(f"Time: {time_list[i]}", name='Time_label')
+            plotter.write_frame()
+            pbar.update()
+    else:
+        exec(f'df = df_{i}')
+        df_glyph = create_particles(df)
+        df_glyph.active_scalars_name = 'Velocity_Z'
+        plotter.mesh.overwrite(df_glyph)
+        plotter.add_text(f"Time: {time_list[i]}", name='Time_label')
+        plotter.write_frame()
+        pbar.update()
+
+pv.close()
+
+
+
