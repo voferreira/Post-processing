@@ -12,21 +12,20 @@ Date: Sep. 10, 2021
 
 figure = False #True if plot
 plot_P_t = False
+write_to_excel = True
 #############################################################################
 
 #############################################################################
 '''Importing Libraries'''
 from math import e, pi
+from re import U
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-import pyvista as pv
 from sklearn import linear_model
-from scipy.interpolate import make_interp_spline
+from tqdm import tqdm
 from Lethe_pyvista_tools import *
-
-#import glob
+from openpyxl import load_workbook
 
 import os
 import sys
@@ -42,13 +41,16 @@ saveFigDir = currentPath
 particle_name = sys.argv[2]
 
 fluid = Lethe_pyvista_tools(currentPath, prm_file_name='liquid_fluidized_bed.prm')
-fluid.read_lethe_to_pyvista('result_.pvd', last = 200)
+fluid.read_lethe_to_pyvista('result_.pvd')
+#fluid.read_lethe_to_pyvista_parallel('result_.pvd', last = 200, processors=2)
 
 particle = Lethe_pyvista_tools(currentPath, prm_file_name='liquid_fluidized_bed.prm')
 
 model_type = fluid.prm_dict['vans model'].replace('model', '')
 velocity_order = str(int(fluid.prm_dict['velocity order']))
 pressure_order = str(int(fluid.prm_dict['pressure order']))
+
+boundary_condition = fluid.prm_dict['bc 0']
 
 scheme = f'Model type {model_type} - Q{velocity_order}-Q{pressure_order}'
 
@@ -96,12 +98,13 @@ deltaP_analytical = Analytical(Np, rp, rhol, rhop, g, Area)
 if os.path.isdir(currentPath + '/P_x') == False:
     os.mkdir(currentPath + '/P_x')
 
+pbar = tqdm(total = len(fluid.time_list)-1, desc="Processing data")
 for i in range(len(fluid.time_list)):
     #Define "df" as last time step df
     exec(f'df = fluid.df_{i}') 
     
     #Adjust data format
-    df = df.point_data_to_cell_data()
+    '''df = df.point_data_to_cell_data()'''
 
     #Find the voidfraction spatial average for the cells with voidfraction below 1
     df_voidfraction = pd.DataFrame(df['void_fraction'])
@@ -127,7 +130,7 @@ for i in range(len(fluid.time_list)):
     total_deltaP.append(-p_x[-1])
     
     #Apply least-squares to find the porosity
-    regr = linear_model.LinearRegression()
+    regr = linear_model.LinearRegression() #fit_intercept = 0
     x_list = np.array(x_list).reshape(-1, 1)
     p_x = np.array(p_x).reshape(-1, 1)
     model = regr.fit(x_list, p_x)
@@ -172,6 +175,9 @@ for i in range(len(fluid.time_list)):
     fig1.savefig(f'{saveFigDir}/P_x/P_x-{i}.png')
     plt.close(fig1)
 
+
+    pbar.update(1)
+
 #Export the total pressure results as a function of time
 csv = pd.DataFrame([fluid.time_list, total_deltaP], index=['time', 'deltaP']).transpose()
 csv.to_csv(f'{saveFigDir}/deltaP_t.csv')
@@ -192,3 +198,33 @@ ax0.grid()
 ax0.set_ylabel(r'$Bed \/\ voidage \/\ [-]$')
 ax0.set_xlabel(r'$Time \/\ [s]$')
 fig0.savefig(f'{saveFigDir}/eps_t.png')
+
+
+eps_ave = np.average(eps_list[-40:])
+eps_std = np.std(eps_list[-40:])
+
+print('Average among the last 10 seconds: ' + str(eps_ave))
+print('Standard Deviation among the last 10 seconds: ' + str(eps_std))
+
+
+if write_to_excel:
+    excel_file_path = 'D:/results/alginate/Abstract_Results.xlsx'
+    excel_pd_average = pd.read_excel(excel_file_path, sheet_name = 'Average', index_col= 0)
+    excel_pd_std = pd.read_excel(excel_file_path, sheet_name = 'Std', index_col= 0)
+
+    excel_pd_std.drop(excel_pd_std.filter(regex="Unnamed"),axis=1, inplace=True)
+
+    print(excel_pd_std)
+    column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}'
+    if column_excel not in excel_pd_average.columns:
+        excel_pd_average[column_excel] = ''
+    if column_excel not in excel_pd_std.columns:
+        excel_pd_std[column_excel] = ''
+
+    excel_pd_average[column_excel][excel_pd_average['U'] == fluid.prm_dict['u']] = eps_ave
+    excel_pd_std[column_excel][excel_pd_average['U'] == fluid.prm_dict['u']] = eps_std
+    
+    with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+        excel_pd_average.to_excel(writer, sheet_name="Average")
+        excel_pd_std.to_excel(writer, sheet_name = 'Std')  
+
