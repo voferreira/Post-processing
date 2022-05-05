@@ -142,11 +142,6 @@ for i in range(len(fluid.time_list)):
     #Find linear portion of the graph and adjust a linear function to it
     x = x_list
     y = p_x
-
-    """for j in range(len(y)-1, -1, -1):
-        if y[j] >= deltaP_analytical*0.95:
-                x = np.delete(x, j).reshape(-1, 1)
-                y = np.delete(y, j).reshape(-1, 1)"""
     
     for j in range(len(y)-1):
         if y[j] >= deltaP_analytical*0.9:
@@ -181,7 +176,6 @@ for i in range(len(fluid.time_list)):
     fig1.savefig(f'{saveFigDir}/P_x/P_x-{i}.png')
     fig1.savefig(f'{saveFigDir}/P_x/P_x-{i}.pdf')
     plt.close(fig1)
-
 
     pbar.update(1)
 
