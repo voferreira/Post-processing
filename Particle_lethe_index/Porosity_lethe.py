@@ -22,7 +22,7 @@ from re import U
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn import linear_model
+#from sklearn import linear_model
 from tqdm import tqdm
 from Lethe_pyvista_tools import *
 from openpyxl import load_workbook
@@ -46,11 +46,18 @@ except:
     elif "Alumina" in currentPath or "alumina" in currentPath:
         particle_name = "Alumina"
 
+try:
+    column_name_complement = sys.argv[3]
+
+except:
+    pass
+
 fluid = Lethe_pyvista_tools(currentPath, prm_file_name='liquid_fluidized_bed.prm')
-fluid.read_lethe_to_pyvista('result_.pvd', first = 1)
+#fluid.read_lethe_to_pyvista('result_.pvd', first = 1)
 #fluid.read_lethe_to_pyvista_parallel('result_.pvd', last = 200, processors=2)
 
 particle = Lethe_pyvista_tools(currentPath, prm_file_name='liquid_fluidized_bed.prm')
+particle.read_lethe_to_pyvista('result__particles.pvd', first = 1, interval = 100)
 
 model_type = fluid.prm_dict['vans model'].replace('model', '')
 velocity_order = str(int(fluid.prm_dict['velocity order']))
@@ -68,12 +75,6 @@ Vp = 4/3*pi*rp**3
 rhop = particle.prm_dict['density particles']
 Np = particle.prm_dict['number']
 inlet_velocity = fluid.prm_dict['u']
-
-try:
-    press_comparison = pd.read_excel(f'D:/results/{particle_name}/Abstract_Pressure.xlsx')
-except:
-    press_comparison = pd.read_excel(f'/mnt/d/results/{particle_name}/Abstract_Pressure.xlsx')
-
 
 g = abs(particle.prm_dict['gx'])       #m/s^2
 Vnp = Np * 4/3 * pi * rp**3
@@ -96,54 +97,71 @@ def Analytical(Np, rp, rhol, rhop, g, Area):
     return delta_p
 #############################################################################
 
-#Define eps_list and voidfraction_list to append value for each time-step
-total_deltaP = []
+X_acc_list = Y_acc_list = Z_acc_list = []
 
-#Create a list with all x values for the pressure takes
-x_pressure_takes = np.arange(-0.45, Hb/2 + 0.01, 0.01)
 
-deltaP_analytical = Analytical(Np, rp, rhol, rhop, g, Area)
+pbar = tqdm(total = len(particle.df_0['ID'])*(len(particle.time_list)-1), desc="Processing data")
 
-if os.path.isdir(currentPath + '/P_x') == False:
-    os.mkdir(currentPath + '/P_x')
+for i in range(1, len(particle.time_list)):
+    exec(f'df_0 = particle.df_{i - 1}')
+    exec(f'df_1 = particle.df_{i}')
+    
+    X_list = []
+    Y_list = []
+    Z_list = []
 
-pbar = tqdm(total = len(fluid.time_list)-1, desc="Processing data")
-for i in range(len(fluid.time_list)):
-    #Define "df" as last time step df
-    exec(f'df = fluid.df_{i}') 
+    X_acc = 0
+    Y_acc = 0
+    Z_acc = 0
 
-    #Take the first slice of the domain at pos0
-    pos0 = [-0.45, 0, 0]
-    slice0 = df.slice(normal=[1, 0, 0], origin = pos0)
-    p0 = slice0.integrate_data()['pressure']/slice0.area
+    for j in range(len(df_0['ID'])):
+        pos_0 = df_0.points[j]
+        pos_1 = df_1.points[df_1['ID'] == df_0['ID'][j]][0]
 
-    #Create empty lists to fill with x values and pressure as function of x values
-    p_x = []
-    x_list = []
+        signal_0 = np.sign(pos_0)
+        signal_1 = np.sign(pos_1)
 
-    #Loop through z values above z0
-    for j in range(len(x_pressure_takes)):
-        x_list.append(x_pressure_takes[j]-pos0[0])
-        slice_x = df.slice(normal=[1, 0, 0], origin = [x_pressure_takes[j], 0, 0])
-        p_x.append((p0 - slice_x.integrate_data()['pressure']/slice_x.area)[0]*rhol)
+        if signal_0[0] == signal_1[0]:
+            X_list.append(1)
+            X_acc += 1
+        else:
+            X_list.append(0)
 
-    #Store the total pressure drop
-    total_deltaP.append(p_x[-1])
+        if signal_0[1] == signal_1[1]:
+            Y_list.append(1)
+            Y_acc += 1
+        else:
+            Y_list.append(0)
 
-    pbar.update(1)
+        if signal_0[2] == signal_1[2]:
+            Z_list.append(1)
+            Z_acc += 1
+        else:
+            Z_list.append(0)
 
-#Export the total pressure results as a function of time
-csv = pd.DataFrame([fluid.time_list, total_deltaP], index=['time', 'deltaP']).transpose()
-csv.to_csv(f'{saveFigDir}/deltaP_t.csv')
+        pbar.update(1)
+    print(X_acc)
+    exec(f'particle.df_{i}["X_list"] = {X_list}')
+    exec(f'particle.df_{i}["Y_list"] = {Y_list}')
+    exec(f'particle.df_{i}["Z_list"] = {Z_list}')
 
-print(f'Average delta P = {np.mean(total_deltaP)} Pa')
+    X_acc_list.append(X_acc)
+    Y_acc_list.append(Y_acc)
+    Z_acc_list.append(Z_acc)
+
+print(X_acc_list)
+
+plt.plot(particle.time_list, X_acc_list)
+plt.show()
+
+exit()
 
 if write_to_excel:
     try:
-        excel_file_path = f'D:/results/{particle_name}/Abstract_Pressure.xlsx'
+        excel_file_path = f'D:/results/{particle_name}/Abstract_Results.xlsx'
         excel_pd_average = pd.read_excel(excel_file_path, sheet_name = 'Average', index_col= 0)
     except:
-        excel_file_path = f'/mnt/d/results/{particle_name}/Abstract_Pressure.xlsx'
+        excel_file_path = f'/mnt/d/results/{particle_name}/Abstract_Results.xlsx'
         excel_pd_average = pd.read_excel(excel_file_path, sheet_name = 'Average', index_col= 0)
     excel_pd_std = pd.read_excel(excel_file_path, sheet_name = 'Std', index_col= 0)
 
@@ -151,21 +169,25 @@ if write_to_excel:
 
     if boundary_condition == 'partial slip':
         column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-Layer: {fluid.prm_dict["boundary layer thickness"]} m'
-    else:    
+    else:
         try:
             lift = fluid.prm_dict["saffman lift force"]
-            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}-Lift'
+            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}-Lift-{fluid.prm_dict["grid type"]}'
         except:
-            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}'
+            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}-{fluid.prm_dict["grid type"]}'
+    if column_name_complement:
+        column_excel = column_excel + f"-{column_name_complement}"
     if column_excel not in excel_pd_average.columns:
         excel_pd_average[column_excel] = ''
     if column_excel not in excel_pd_std.columns:
         excel_pd_std[column_excel] = ''
 
-    excel_pd_average[column_excel][excel_pd_average['U'] == fluid.prm_dict['u']] = np.mean(total_deltaP)
-    excel_pd_std[column_excel][excel_pd_average['U'] == fluid.prm_dict['u']] = np.std(total_deltaP)
+    excel_pd_average[column_excel][excel_pd_average['U'] == fluid.prm_dict['u']] = eps_ave
+    excel_pd_std[column_excel][excel_pd_average['U'] == fluid.prm_dict['u']] = eps_std
     
     with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
         excel_pd_average.to_excel(writer, sheet_name="Average")
         excel_pd_std.to_excel(writer, sheet_name = 'Std')  
+
+
 

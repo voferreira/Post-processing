@@ -12,7 +12,7 @@ Date: Sep. 10, 2021
 
 figure = False #True if plot
 plot_P_t = False
-write_to_excel = False
+write_to_excel = True
 #############################################################################
 
 #############################################################################
@@ -73,16 +73,16 @@ rp = dp/2
 Vp = 4/3*pi*rp**3
 rhop = particle.prm_dict['density particles']
 Np = particle.prm_dict['number']
-inlet_velocity = fluid.prm_dict['u']
+inlet_velocity = fluid.prm_dict['w']
 
-# try:
-#     eps_comparison = pd.read_excel(f'D:/results/{particle_name}/Abstract_Results.xlsx')
-# except:
-#     eps_comparison = pd.read_excel(f'/mnt/d/results/{particle_name}/Abstract_Results.xlsx')
-# eps_exp = eps_comparison['Experimental'][eps_comparison['U'] == inlet_velocity].values
-# eps_RZ = eps_comparison['R-Z'][eps_comparison['U'] == inlet_velocity].values
+try:
+    eps_comparison = pd.read_excel(f'D:/results/{particle_name}/Abstract_Results.xlsx')
+except:
+    eps_comparison = pd.read_excel(f'/mnt/d/results/{particle_name}/Abstract_Results.xlsx')
+eps_exp = eps_comparison['Experimental'][eps_comparison['U'] == inlet_velocity].values
+eps_RZ = eps_comparison['R-Z'][eps_comparison['U'] == inlet_velocity].values
 
-g = abs(particle.prm_dict['gx'])       #m/s^2
+g = abs(particle.prm_dict['gz'])       #m/s^2
 Vnp = Np * 4/3 * pi * rp**3
 
 rhol = fluid.prm_dict['density']  #kg/m^3
@@ -109,12 +109,12 @@ voidfraction_list = []
 total_deltaP = []
 
 #Create a list with all x values for the pressure takes
-x_pressure_takes = np.arange(-0.45, Hb/2 + 0.01, 0.01)
+z_pressure_takes = np.arange(0.1, Hb + 0.01, 0.01)
 
 deltaP_analytical = Analytical(Np, rp, rhol, rhop, g, Area)
 
-if os.path.isdir(currentPath + '/P_x') == False:
-    os.mkdir(currentPath + '/P_x')
+if os.path.isdir(currentPath + '/P_z') == False:
+    os.mkdir(currentPath + '/P_z')
 
 pbar = tqdm(total = len(fluid.time_list)-1, desc="Processing data")
 for i in range(len(fluid.time_list)):
@@ -130,33 +130,33 @@ for i in range(len(fluid.time_list)):
     voidfraction_list.append(voidfraction_ave[0])
 
     #Take the first slice of the domain at pos0
-    pos0 = [-0.45, 0, 0]
-    slice0 = df.slice(normal=[1, 0, 0], origin = pos0)
+    pos0 = [0, 0, 0.1]
+    slice0 = df.slice(normal=[0, 0, 1], origin = pos0)
     p0 = np.mean(slice0['pressure'])
 
     #Create empty lists to fill with x values and pressure as function of x values
-    p_x = []
-    x_list = []
+    p_z = []
+    z_list = []
 
     #Loop through z values above z0
-    for j in range(len(x_pressure_takes)):
-        x_list.append(x_pressure_takes[j]-pos0[0])
-        slice_x = df.slice(normal=[1, 0, 0], origin = [x_pressure_takes[j], 0, 0])
-        p_x.append((p0 - np.mean(slice_x['pressure']))*rhol)
+    for j in range(len(z_pressure_takes)):
+        z_list.append(z_pressure_takes[j]-pos0[2])
+        slice_z = df.slice(normal=[0, 0, 1], origin = [0, 0, z_pressure_takes[j]])
+        p_z.append((p0 - np.mean(slice_z['pressure']))*rhol)
 
     #Store the total pressure drop
-    total_deltaP.append(p_x[-1])
+    total_deltaP.append(p_z[-1])
     
     #Apply least-squares to find the porosity
     regr = linear_model.LinearRegression() #fit_intercept = 0
-    x_list = np.array(x_list).reshape(-1, 1)
-    p_x = np.array(p_x).reshape(-1, 1)
-    model = regr.fit(x_list, p_x)
-    r_sq = model.score(x_list, p_x)
+    z_list = np.array(z_list).reshape(-1, 1)
+    p_z = np.array(p_z).reshape(-1, 1)
+    model = regr.fit(z_list, p_z)
+    r_sq = model.score(z_list, p_z)
 
     #Find linear portion of the graph and adjust a linear function to it
-    x = x_list
-    y = p_x
+    x = z_list
+    y = p_z
 
     """for j in range(len(y)-1, -1, -1):
         if y[j] >= deltaP_analytical*0.95:
@@ -164,7 +164,7 @@ for i in range(len(fluid.time_list)):
                 y = np.delete(y, j).reshape(-1, 1)"""
     
     for j in range(len(y)-1):
-        if y[j] >= deltaP_analytical*0.9:
+        if y[j] >= deltaP_analytical*0.8:
                 x = x[:j]
                 y = y[:j]
                 break
@@ -181,8 +181,8 @@ for i in range(len(fluid.time_list)):
         fig1.suptitle(f'{particle_name}: {scheme}, time = {fluid.time_list[i]}-{boundary_condition}-Layer: {fluid.prm_dict["boundary layer thickness"]} m')
     else:
         fig1.suptitle(f'{particle_name}: {scheme}, time = {fluid.time_list[i]}')
-    ax1.plot(x_list, p_x, 'ok', ms = 5, label ='Simulation')
-    ax1.plot(x_list, np.repeat(deltaP_analytical, len(x_list)), '.r', ms = 2, label = 'Analytical')
+    ax1.plot(z_list, p_z, 'ok', ms = 5, label ='Simulation')
+    ax1.plot(z_list, np.repeat(deltaP_analytical, len(z_list)), '.r', ms = 2, label = 'Analytical')
     ax1.plot(x, y, '.g')
     ax1.plot(x, model.predict(x), '-b')
     #plt.text(17.5, 0, r'$\varepsilon =  (-dp/dz)$')
@@ -193,8 +193,8 @@ for i in range(len(fluid.time_list)):
     ax1.set_ylim(0, deltaP_analytical*1.30)
     ax1.legend()
     ax1.annotate(r'$\varepsilon (-dp/dz) = {:1.2}$'.format(eps), (x[round(len(x)/2)], y[round(len(y)/2)]), xytext=(0.65, 0.4), textcoords='axes fraction', arrowprops=dict(facecolor='black', shrink=0.04), fontsize=14, horizontalalignment='right', verticalalignment='top')
-    fig1.savefig(f'{saveFigDir}/P_x/P_x-{i}.png')
-    fig1.savefig(f'{saveFigDir}/P_x/P_x-{i}.pdf')
+    fig1.savefig(f'{saveFigDir}/P_z/P_z-{i}.png')
+    fig1.savefig(f'{saveFigDir}/P_z/P_z-{i}.pdf')
     plt.close(fig1)
 
     pbar.update(1)
@@ -214,9 +214,9 @@ else:
     fig0.suptitle(f'{particle_name}: {scheme}')
 ax0.plot(fluid.time_list, eps_list, 'ok', label = 'Simulation - pressure drop', ms = 5)
 ax0.plot(fluid.time_list, voidfraction_list, 'og', label = 'Simulation - Average among voidage < 1 cells')
-#ax0.plot(fluid.time_list, np.repeat(eps_exp, len(fluid.time_list)), '--r', label = 'Experimental (+/- 5%)')
-#ax0.fill_between(fluid.time_list, np.repeat(eps_exp, len(fluid.time_list))*0.95, np.repeat(eps_exp, len(fluid.time_list))*1.05, color = 'r', alpha = 0.3)
-#ax0.plot(fluid.time_list, np.repeat(eps_RZ, len(fluid.time_list)), '.b', label = 'Richardson & Zaki')
+ax0.plot(fluid.time_list, np.repeat(eps_exp, len(fluid.time_list)), '--r', label = 'Experimental (+/- 5%)')
+ax0.fill_between(fluid.time_list, np.repeat(eps_exp, len(fluid.time_list))*0.95, np.repeat(eps_exp, len(fluid.time_list))*1.05, color = 'r', alpha = 0.3)
+ax0.plot(fluid.time_list, np.repeat(eps_RZ, len(fluid.time_list)), '.b', label = 'Richardson & Zaki')
 ax0.legend()
 ax0.grid()
 #ax0.set_xlim(0, 35)
@@ -225,7 +225,6 @@ ax0.set_ylabel(r'$Bed \/\ voidage \/\ [-]$')
 ax0.set_xlabel(r'$Time \/\ [s]$')
 fig0.savefig(f'{saveFigDir}/eps_t.png')
 fig0.savefig(f'{saveFigDir}/eps_t.pdf')
-plt.close(fig0)
 
 
 eps_ave = np.average(eps_list[-10:])
@@ -252,12 +251,16 @@ if write_to_excel:
     else:
         try:
             lift = fluid.prm_dict["saffman lift force"]
-            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}-Lift-{fluid.prm_dict["grid type"]}'
+            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}-Lift'
         except:
-            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}' # -{fluid.prm_dict["grid type"]}'
-#        column_excel = f'{column_excel}-sliding_{fluid.prm_dict["friction coefficient particles"]}'
-    #if column_name_complement:
-    #    column_excel = column_excel + f"-{column_name_complement}"
+            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}'
+    try:
+        column_excel = column_excel + f"-{fluid.prm_dict['grid type']}"
+
+    except:
+        pass
+
+    column_excel = column_excel + f"-{column_name_complement}"
     if column_excel not in excel_pd_average.columns:
         excel_pd_average[column_excel] = ''
     if column_excel not in excel_pd_std.columns:
@@ -272,12 +275,12 @@ if write_to_excel:
 
 
 height = Vp*Np/ (Area * (1 - eps_ave))
-#height_exp = Vp*Np/ (Area * (1 - eps_exp[0]))
+height_exp = Vp*Np/ (Area * (1 - eps_exp[0]))
 
-#print(f"Bed height = {height} -> {abs(height_exp - height)/height_exp * 100} % deviation of height")
+print(f"Bed height = {height} -> {abs(height_exp - height)/height_exp * 100} % deviation of height")
 
-#height_of_cells = 1.1 /(132)
+height_of_cells = 1.1 /(132)
 
-#number_of_cells_missing = abs(height_exp - height)/height_of_cells
+number_of_cells_missing = abs(height_exp - height)/height_of_cells
 
-#print(f"Number of cells missing = {number_of_cells_missing}")
+print(f"Number of cells missing = {number_of_cells_missing}")

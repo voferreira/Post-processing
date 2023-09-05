@@ -14,8 +14,10 @@ figure = False #True if plot
 plot_P_t = False
 
 clip_results = False
+slice_fluid = True
 smooth = False
-n_substeps = 5
+
+field = "void_fraction"
 
 if smooth:
     print('Smoothing, so not clipping')
@@ -53,6 +55,9 @@ particle_name = sys.argv[2]
 
 particle = Lethe_pyvista_tools(currentPath, prm_file_name='liquid_fluidized_bed.prm')
 particle.read_lethe_to_pyvista('result__particles.pvd')
+
+fluid = Lethe_pyvista_tools(currentPath, prm_file_name='liquid_fluidized_bed.prm')
+fluid.read_lethe_to_pyvista('result_.pvd')
 
 model_type = particle.prm_dict['vans model'].replace('model', '')
 velocity_order = str(int(particle.prm_dict['velocity order']))
@@ -130,42 +135,48 @@ plotter.camera.roll -= 90
 #plotter.camera.roll += 90
 
 bounds = pv.Cube(center = [0, -0.025, 0], x_length = 1.1, y_length = 0.05, z_length = 0.1)
-for i in range(0, len(particle.list_vtu)):
+for i in range(0, len(fluid.list_vtu)):
     #Read DF from VTU files
     exec(f'particle.df_{i}[\'Velocity_[m/s]\'] = particle.df_{i}[\'Velocity\'][:, 0]')
+    exec(f'fluid.df_{i}[\'velocity_[m/s]\'] = fluid.df_{i}[\'velocity\'][:, 0]')
     if clip_results:
         exec(f'particle.df_{i} = particle.df_{i}.clip_box(bounds, invert=False)')
+        
+    if slice_fluid:
+        exec(f'fluid.df_{i} = fluid.df_{i}.slice(normal = [0, 1, 0])')
+        exec(f'df = fluid.df_{i}')
 
 
 exec(f'df_glyph = create_particles(particle.df_{len(particle.list_vtu)-2})')
 
 #Add data to the plotter
-plotter.add_mesh(df_glyph, cmap = 'turbo', scalars = 'Velocity_[m/s]', smooth_shading=True, scalar_bar_args={'color': 'k', 'vertical': True, 'position_x' : 0.60, 'position_y' :0.05})
+#plotter.add_mesh(df_glyph, cmap = 'turbo', scalars = 'Velocity_[m/s]', smooth_shading=True, scalar_bar_args={'color': 'k', 'vertical': True, 'position_x' : 0.60, 'position_y' :0.05})
+plotter.add_mesh(df, cmap = 'turbo', scalars = field, smooth_shading=True, scalar_bar_args={'color': 'k', 'vertical': True, 'position_x' : 0.60, 'position_y' :0.05})
 
+n_substeps = 5
 
+#plotter.open_movie(f"{saveFigDir}/particles_interpolate.mp4", framerate=4, quality=8) #20
+plotter.open_movie(f"{saveFigDir}/{field}.mp4", framerate=10, quality=8)
 
-
-plotter.open_movie(f"{saveFigDir}/particles_interpolate.mp4", framerate=10, quality=8) #20
-
-n_total = (len(particle.time_list) - 1)*n_substeps
+n_total = (len(fluid.time_list) - 1)
 pbar = tqdm(total=n_total, desc="Writing Frames")
-df = particle.df_0
-for i in range(1, len(particle.list_vtu)-1):
+df = fluid.df_0
+for i in range(1, len(fluid.list_vtu)-1):
     if smooth:
         df_prev = df
         exec(f'df = particle.df_{i}')
         for j in range(n_substeps):
             interp = basic_interpolation(df_prev, df, j/n_substeps)
             plotter.mesh.overwrite(interp)
-            plotter.add_text(f"Time: {particle.time_list[i]} s", name='Time_label')
+            plotter.add_text(f"Time: {particle.time_list[i]}", name='Time_label')
             plotter.write_frame()
             pbar.update()
     else:
-        exec(f'df = particle.df_{i}')
-        df_glyph = create_particles(df)
-        df_glyph.active_scalars_name = 'Velocity_[m/s]'
-        plotter.mesh.overwrite(df_glyph)
-        plotter.add_text(f"Time: {particle.time_list[i]}", name='Time_label')
+        exec(f'df = fluid.df_{i}')
+        df_fluid = df
+        df_fluid.active_scalars_name = field
+        plotter.mesh.overwrite(df_fluid)
+        plotter.add_text(f"Time: {fluid.time_list[i]}", name='Time_label')
         plotter.write_frame()
         pbar.update()
 

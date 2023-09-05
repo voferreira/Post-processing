@@ -12,7 +12,7 @@ Date: Sep. 10, 2021
 
 figure = False #True if plot
 plot_P_t = False
-write_to_excel = False
+write_to_excel = True
 #############################################################################
 
 #############################################################################
@@ -38,19 +38,7 @@ import sys
 currentPath = sys.argv[1]
 saveFigDir = currentPath
 
-try:
-    particle_name = sys.argv[2]
-except:
-    if "Alginate" in currentPath or "alginate" in currentPath:
-        particle_name = "Alginate"
-    elif "Alumina" in currentPath or "alumina" in currentPath:
-        particle_name = "Alumina"
-
-try:
-    column_name_complement = sys.argv[3]
-
-except:
-    pass
+particle_name = sys.argv[2]
 
 fluid = Lethe_pyvista_tools(currentPath, prm_file_name='liquid_fluidized_bed.prm')
 fluid.read_lethe_to_pyvista('result_.pvd', first = 1)
@@ -61,8 +49,6 @@ particle = Lethe_pyvista_tools(currentPath, prm_file_name='liquid_fluidized_bed.
 model_type = fluid.prm_dict['vans model'].replace('model', '')
 velocity_order = str(int(fluid.prm_dict['velocity order']))
 pressure_order = str(int(fluid.prm_dict['pressure order']))
-
-drag_model = fluid.prm_dict['drag model']
 
 boundary_condition = fluid.prm_dict['bc 0']
 
@@ -75,12 +61,12 @@ rhop = particle.prm_dict['density particles']
 Np = particle.prm_dict['number']
 inlet_velocity = fluid.prm_dict['u']
 
-# try:
-#     eps_comparison = pd.read_excel(f'D:/results/{particle_name}/Abstract_Results.xlsx')
-# except:
-#     eps_comparison = pd.read_excel(f'/mnt/d/results/{particle_name}/Abstract_Results.xlsx')
-# eps_exp = eps_comparison['Experimental'][eps_comparison['U'] == inlet_velocity].values
-# eps_RZ = eps_comparison['R-Z'][eps_comparison['U'] == inlet_velocity].values
+try:
+    eps_comparison = pd.read_excel(f'D:/results/{particle_name}/Abstract_Results.xlsx')
+except:
+    eps_comparison = pd.read_excel(f'/mnt/d/results/{particle_name}/Abstract_Results.xlsx')
+eps_exp = eps_comparison['Experimental'][eps_comparison['U'] == inlet_velocity].values
+eps_RZ = eps_comparison['R-Z'][eps_comparison['U'] == inlet_velocity].values
 
 g = abs(particle.prm_dict['gx'])       #m/s^2
 Vnp = Np * 4/3 * pi * rp**3
@@ -163,16 +149,25 @@ for i in range(len(fluid.time_list)):
                 x = np.delete(x, j).reshape(-1, 1)
                 y = np.delete(y, j).reshape(-1, 1)"""
     
-    for j in range(len(y)-1):
+    '''for j in range(len(y)-1):
         if y[j] >= deltaP_analytical*0.9:
                 x = x[:j]
                 y = y[:j]
                 break
     
-    model = regr.fit(x, y)
+    model = regr.fit(x, y)'''
+
+    for j in range(1, len(y)-1):
+        two_point_difference = abs(y[j]-y[j-1])/y[j]
+        if two_point_difference < 0.01:
+            height_sim = x[j-1]
+            #print(f"HEIGHT SIM = {height_sim}")
+            p_height_sim = y[j-1]
+            break
+
 
     #Calculate bed voidage by the slope of the pressure drop curve
-    eps = 1-(model.coef_[0][0]/((rhop-rhol)*g))
+    eps = 1-(Vnp/(Area * height_sim[0]))#(model.coef_[0][0]/((rhop-rhol)*g))
     eps_list.append(eps)
 
     fig1 = plt.figure()
@@ -192,7 +187,8 @@ for i in range(len(fluid.time_list)):
     ax1.set_xlim(0, 1.02)
     ax1.set_ylim(0, deltaP_analytical*1.30)
     ax1.legend()
-    ax1.annotate(r'$\varepsilon (-dp/dz) = {:1.2}$'.format(eps), (x[round(len(x)/2)], y[round(len(y)/2)]), xytext=(0.65, 0.4), textcoords='axes fraction', arrowprops=dict(facecolor='black', shrink=0.04), fontsize=14, horizontalalignment='right', verticalalignment='top')
+    #ax1.annotate(r'$\varepsilon (-dp/dz) = {:1.2}$'.format(eps), (x[round(len(x)/2)], y[round(len(y)/2)]), xytext=(0.65, 0.4), textcoords='axes fraction', arrowprops=dict(facecolor='black', shrink=0.04), fontsize=14, horizontalalignment='right', verticalalignment='top')
+    ax1.annotate(r'$\varepsilon = {:1.2}$'.format(eps), (height_sim, p_height_sim), xytext=(0.65, 0.4), textcoords='axes fraction', arrowprops=dict(facecolor='black', shrink=0.04), fontsize=14, horizontalalignment='right', verticalalignment='top')
     fig1.savefig(f'{saveFigDir}/P_x/P_x-{i}.png')
     fig1.savefig(f'{saveFigDir}/P_x/P_x-{i}.pdf')
     plt.close(fig1)
@@ -214,9 +210,9 @@ else:
     fig0.suptitle(f'{particle_name}: {scheme}')
 ax0.plot(fluid.time_list, eps_list, 'ok', label = 'Simulation - pressure drop', ms = 5)
 ax0.plot(fluid.time_list, voidfraction_list, 'og', label = 'Simulation - Average among voidage < 1 cells')
-#ax0.plot(fluid.time_list, np.repeat(eps_exp, len(fluid.time_list)), '--r', label = 'Experimental (+/- 5%)')
-#ax0.fill_between(fluid.time_list, np.repeat(eps_exp, len(fluid.time_list))*0.95, np.repeat(eps_exp, len(fluid.time_list))*1.05, color = 'r', alpha = 0.3)
-#ax0.plot(fluid.time_list, np.repeat(eps_RZ, len(fluid.time_list)), '.b', label = 'Richardson & Zaki')
+ax0.plot(fluid.time_list, np.repeat(eps_exp, len(fluid.time_list)), '--r', label = 'Experimental (+/- 5%)')
+ax0.fill_between(fluid.time_list, np.repeat(eps_exp, len(fluid.time_list))*0.95, np.repeat(eps_exp, len(fluid.time_list))*1.05, color = 'r', alpha = 0.3)
+ax0.plot(fluid.time_list, np.repeat(eps_RZ, len(fluid.time_list)), '.b', label = 'Richardson & Zaki')
 ax0.legend()
 ax0.grid()
 #ax0.set_xlim(0, 35)
@@ -225,11 +221,10 @@ ax0.set_ylabel(r'$Bed \/\ voidage \/\ [-]$')
 ax0.set_xlabel(r'$Time \/\ [s]$')
 fig0.savefig(f'{saveFigDir}/eps_t.png')
 fig0.savefig(f'{saveFigDir}/eps_t.pdf')
-plt.close(fig0)
 
 
-eps_ave = np.average(eps_list[-10:])
-eps_std = np.std(eps_list[-10:])
+eps_ave = np.average(eps_list[-40:])
+eps_std = np.std(eps_list[-40:])
 
 print('Average among the last 10 seconds: ' + str(eps_ave))
 print('Standard Deviation among the last 10 seconds: ' + str(eps_std))
@@ -252,12 +247,9 @@ if write_to_excel:
     else:
         try:
             lift = fluid.prm_dict["saffman lift force"]
-            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}-Lift-{fluid.prm_dict["grid type"]}'
+            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-Lift'
         except:
-            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}-{drag_model}' # -{fluid.prm_dict["grid type"]}'
-#        column_excel = f'{column_excel}-sliding_{fluid.prm_dict["friction coefficient particles"]}'
-    #if column_name_complement:
-    #    column_excel = column_excel + f"-{column_name_complement}"
+            column_excel = f'{model_type}-Q{velocity_order}-Q{pressure_order}-{boundary_condition}'
     if column_excel not in excel_pd_average.columns:
         excel_pd_average[column_excel] = ''
     if column_excel not in excel_pd_std.columns:
@@ -272,12 +264,12 @@ if write_to_excel:
 
 
 height = Vp*Np/ (Area * (1 - eps_ave))
-#height_exp = Vp*Np/ (Area * (1 - eps_exp[0]))
+height_exp = Vp*Np/ (Area * (1 - eps_exp[0]))
 
-#print(f"Bed height = {height} -> {abs(height_exp - height)/height_exp * 100} % deviation of height")
+print(f"Bed height = {height} -> {abs(height_exp - height)/height_exp * 100} % deviation of height")
 
-#height_of_cells = 1.1 /(132)
+height_of_cells = 1.1 /(132)
 
-#number_of_cells_missing = abs(height_exp - height)/height_of_cells
+number_of_cells_missing = abs(height_exp - height)/height_of_cells
 
-#print(f"Number of cells missing = {number_of_cells_missing}")
+print(f"Number of cells missing = {number_of_cells_missing}")

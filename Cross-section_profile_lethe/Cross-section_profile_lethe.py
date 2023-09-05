@@ -100,7 +100,7 @@ single_slice = df.slice(normal=[0, 1, 0], origin = [0, 0, 0])
 plotter = pv.Plotter(off_screen=None)
 
 #Add data to the plotter
-plotter.add_mesh(single_slice, scalars = single_slice['void_fraction'], cmap = 'turbo', preference = 'cells', show_edges=False)
+plotter.add_mesh(single_slice, scalars = single_slice['velocity'], cmap = 'turbo', preference = 'cells', show_edges=False)
 
 #Add text to the plotter
 plotter.add_text(f'Voidfraction profile \n at time = {2} s')

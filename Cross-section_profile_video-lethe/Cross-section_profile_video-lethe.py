@@ -77,6 +77,7 @@ list_vtu = [i.replace('.pvtu', '.0000.vtu') for i in list_vtu]
 for i in range(0, len(list_vtu)):
     #Read DF from VTK files
     exec(f'df_{i} = pv.read(f\'{currentPath}/{list_vtu[i]}\')')
+    exec(f'df_{i}.velocity_x = df_{i}["velocity"][:, 0]')
 
 #Selecet a data to apply the slice   
 exec(f'df = df_{0}')
