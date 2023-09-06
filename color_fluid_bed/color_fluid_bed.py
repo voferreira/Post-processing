@@ -12,6 +12,7 @@ from lethe_pyvista_tools import *
 from lethe_pyvista_tools import *
 
 import scipy as sp
+import scipy
 
 test = False
 first = 0
