@@ -11,6 +11,8 @@ from lethe_pyvista_tools import *
 
 from lethe_pyvista_tools import *
 
+import scipy as sp
+
 test = False
 first = 0
 test_case_n = 2
